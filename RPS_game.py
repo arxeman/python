@@ -56,9 +56,9 @@ def show_countdown(cap, seconds=2):
             continue
         frame = cv2.flip(frame, 1)
         cv2.putText(frame, f"Get ready: {i}", (150, 200), cv2.FONT_HERSHEY_SIMPLEX, 
-                    2, (0, 0, 0), 4, cv2.LINE_AA)
+                    2, (0, 0, 255), 4, cv2.LINE_AA)
         cv2.imshow('Rock-Paper-Scissors', frame)
-        cv2.waitKey(1000)  # Wait for 1 second
+        cv2.waitKey(1000)
 
 # Game setup
 rounds = int(input("Enter number of rounds: "))
@@ -73,54 +73,72 @@ while cap.isOpened() and game_active and current_round <= rounds:
     # --- Show the countdown before each round ---
     show_countdown(cap, 2)
 
-    success, image = cap.read()
-    if not success:
-        continue
-    
-    image = cv2.flip(image, 1)
-    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    results = hands.process(image_rgb)
+    # NEW: Capture hand gestures for 2 seconds
+    gesture_counts = {'rock': 0, 'paper': 0, 'scissors': 0}
+    start_time = time.time()
+    capture_duration = 2  # seconds
 
-    # Display round and score
-    cv2.putText(image, f"Round: {current_round}/{rounds}", (10, 30), 
-                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
-    cv2.putText(image, f"Player: {player_score}  Computer: {computer_score}", (10, 60),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
-    
-    if results.multi_hand_landmarks:
-        for hand_landmarks in results.multi_hand_landmarks:
-            mp_draw.draw_landmarks(image, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+    while time.time() - start_time < capture_duration:
+        success, image = cap.read()
+        if not success:
+            continue
+        
+        image = cv2.flip(image, 1)
+        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        results = hands.process(image_rgb)
 
-            finger_count = count_fingers(hand_landmarks)
-            player_gesture = determine_gesture(finger_count)
+        # Display round and score
+        cv2.putText(image, f"Round: {current_round}/{rounds}", (10, 30), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
+        cv2.putText(image, f"Player: {player_score}  Computer: {computer_score}", (10, 60),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
 
-            if player_gesture:
-                # Get computer's choice
-                computer_choice = get_computer_choice()
-                result = get_winner(player_gesture, computer_choice)
+        if results.multi_hand_landmarks:
+            for hand_landmarks in results.multi_hand_landmarks:
+                mp_draw.draw_landmarks(image, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+                finger_count = count_fingers(hand_landmarks)
+                player_gesture = determine_gesture(finger_count)
+                if player_gesture:
+                    gesture_counts[player_gesture] += 1
 
-                # Display both choices and result
-                cv2.putText(image, f"Your gesture: {player_gesture}", (10, 90),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 2)
-                cv2.putText(image, f"Computer gesture: {computer_choice}", (10, 130),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 2)
-                cv2.putText(image, f"Result: {result}", (10, 170),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 2)
+        cv2.imshow('Rock-Paper-Scissors', image)
+        if cv2.waitKey(5) & 0xFF == 27:  # ESC to exit
+            game_active = False
+            break
 
-                cv2.imshow('Rock-Paper-Scissors', image)
-                cv2.waitKey(2000)  # Show for 2 seconds
-
-                if result == 'player':
-                    player_score += 1
-                elif result == 'computer':
-                    computer_score += 1
-
-                current_round += 1
-                break
-
-    cv2.imshow('Rock-Paper-Scissors', image)
-    if cv2.waitKey(5) & 0xFF == 27:  # ESC to exit
+    if not game_active:
         break
+
+    # Choose the gesture with the highest count
+    if any(gesture_counts.values()):
+        player_gesture = max(gesture_counts, key=gesture_counts.get)
+
+        # Get computer's choice
+        computer_choice = get_computer_choice()
+        result = get_winner(player_gesture, computer_choice)
+
+        # Display result
+        ret, frame = cap.read()
+        if not ret:
+            continue
+        frame = cv2.flip(frame, 1)
+
+        cv2.putText(frame, f"Your gesture: {player_gesture}", (10, 90),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+        cv2.putText(frame, f"Computer gesture: {computer_choice}", (10, 130),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+        cv2.putText(frame, f"Result: {result}", (10, 170),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 128, 0), 2)
+        
+        cv2.imshow('Rock-Paper-Scissors', frame)
+        cv2.waitKey(2000)
+
+        if result == 'player':
+            player_score += 1
+        elif result == 'computer':
+            computer_score += 1
+
+        current_round += 1
 
 cap.release()
 cv2.destroyAllWindows()
