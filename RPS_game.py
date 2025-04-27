@@ -5,39 +5,38 @@ import time
 
 # Initialize MediaPipe Hands
 mp_hands = mp.solutions.hands
-hands = mp_hands.Hands(static_image_mode=False, 
-                      max_num_hands=1,
-                      min_detection_confidence=0.7)
+hands = mp_hands.Hands(
+    static_image_mode=False,
+    max_num_hands=1,
+    min_detection_confidence=0.7
+)
 mp_draw = mp.solutions.drawing_utils
 
-# Finger tip landmark IDs
-finger_tips = [4, 8, 12, 16, 20]
+def determine_gesture(hand_landmarks):
+    # Thumb: compare x-coordinates (for right hand; flip for left)
+    thumb_tip = hand_landmarks.landmark[4]
+    thumb_ip = hand_landmarks.landmark[3]
+    thumb_up = thumb_tip.x < thumb_ip.x
 
-def count_fingers(hand_landmarks):
-    fingers = []
-    if hand_landmarks.landmark[4].x < hand_landmarks.landmark[3].x:
-        fingers.append(1)
-    else:
-        fingers.append(0)
-    for tip in finger_tips[1:]:
-        if hand_landmarks.landmark[tip].y < hand_landmarks.landmark[tip-2].y:
-            fingers.append(1)
-        else:
-            fingers.append(0)
-    return sum(fingers)
+    # Fingers: compare y-coordinates (tip above pip means up)
+    index_up = hand_landmarks.landmark[8].y < hand_landmarks.landmark[6].y
+    middle_up = hand_landmarks.landmark[12].y < hand_landmarks.landmark[10].y
+    ring_up = hand_landmarks.landmark[16].y < hand_landmarks.landmark[14].y
+    pinky_up = hand_landmarks.landmark[20].y < hand_landmarks.landmark[18].y
+
+    # Rock: all fingers closed
+    if not any([thumb_up, index_up, middle_up, ring_up, pinky_up]):
+        return 'rock'
+    # Paper: all fingers open (thumb can be up or down)
+    if all([index_up, middle_up, ring_up, pinky_up]):
+        return 'paper'
+    # Scissors: only index and middle up, ring and pinky down
+    if index_up and middle_up and not ring_up and not pinky_up:
+        return 'scissors'
+    return None
 
 def get_computer_choice():
     return random.choice(['rock', 'paper', 'scissors'])
-
-def determine_gesture(finger_count):
-    if finger_count == 0:
-        return 'rock'
-    elif finger_count == 5:
-        return 'paper'
-    elif finger_count == 2:
-        return 'scissors'
-    else:
-        return None
 
 def get_winner(player_choice, computer_choice):
     if player_choice == computer_choice:
@@ -55,7 +54,7 @@ def show_countdown(cap, seconds=2):
         if not ret:
             continue
         frame = cv2.flip(frame, 1)
-        cv2.putText(frame, f"Get ready: {i}", (150, 200), cv2.FONT_HERSHEY_SIMPLEX, 
+        cv2.putText(frame, f"Get ready: {i}", (150, 200), cv2.FONT_HERSHEY_SIMPLEX,
                     2, (0, 0, 255), 4, cv2.LINE_AA)
         cv2.imshow('Rock-Paper-Scissors', frame)
         cv2.waitKey(1000)
@@ -73,7 +72,7 @@ while cap.isOpened() and game_active and current_round <= rounds:
     # --- Show the countdown before each round ---
     show_countdown(cap, 2)
 
-    # NEW: Capture hand gestures for 2 seconds
+    # Capture hand gestures for 2 seconds
     gesture_counts = {'rock': 0, 'paper': 0, 'scissors': 0}
     start_time = time.time()
     capture_duration = 2  # seconds
@@ -82,13 +81,13 @@ while cap.isOpened() and game_active and current_round <= rounds:
         success, image = cap.read()
         if not success:
             continue
-        
+
         image = cv2.flip(image, 1)
         image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         results = hands.process(image_rgb)
 
         # Display round and score
-        cv2.putText(image, f"Round: {current_round}/{rounds}", (10, 30), 
+        cv2.putText(image, f"Round: {current_round}/{rounds}", (10, 30),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
         cv2.putText(image, f"Player: {player_score}  Computer: {computer_score}", (10, 60),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
@@ -96,8 +95,7 @@ while cap.isOpened() and game_active and current_round <= rounds:
         if results.multi_hand_landmarks:
             for hand_landmarks in results.multi_hand_landmarks:
                 mp_draw.draw_landmarks(image, hand_landmarks, mp_hands.HAND_CONNECTIONS)
-                finger_count = count_fingers(hand_landmarks)
-                player_gesture = determine_gesture(finger_count)
+                player_gesture = determine_gesture(hand_landmarks)
                 if player_gesture:
                     gesture_counts[player_gesture] += 1
 
@@ -129,7 +127,7 @@ while cap.isOpened() and game_active and current_round <= rounds:
                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
         cv2.putText(frame, f"Result: {result}", (10, 170),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 128, 0), 2)
-        
+
         cv2.imshow('Rock-Paper-Scissors', frame)
         cv2.waitKey(2000)
 
